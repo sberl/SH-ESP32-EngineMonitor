@@ -85,7 +85,10 @@ void setup() {
 
   SensESPAppBuilder builder;
 
-  sensesp_app = builder.set_hostname("temperatures")->get_app();
+  sensesp_app = (&builder)
+                    ->set_hostname("temperatures")
+                    ->enable_ota("elvira")
+                    ->get_app();
 
   DallasTemperatureSensors* dts = new DallasTemperatureSensors(ONEWIRE_PIN);
 
