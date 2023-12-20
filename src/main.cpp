@@ -3,6 +3,8 @@
 #include <N2kMessages.h>
 #include <NMEA2000_esp32.h>
 
+#include "eh_digital.h"
+
 #include "sensesp/signalk/signalk_output.h"
 #include "sensesp_app_builder.h"
 #include "sensesp_onewire/onewire_temperature.h"
@@ -18,13 +20,17 @@
 #define CAN_RX_PIN GPIO_NUM_34
 #define CAN_TX_PIN GPIO_NUM_32
 
+// Opto-isolator input pin 
+const int kDigitalInputPin1 = GPIO_NUM_35;
+
+
 // OLED display width and height, in pixels
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
 // define temperature display units
-#define TEMP_DISPLAY_FUNC KelvinToCelsius
-//#define TEMP_DISPLAY_FUNC KelvinToFahrenheit
+// #define TEMP_DISPLAY_FUNC KelvinToCelsius
+#define TEMP_DISPLAY_FUNC KelvinToFahrenheit
 
 using namespace sensesp;
 
@@ -44,6 +50,13 @@ void PrintTemperature(int row, String title, float temperature) {
   ClearRow(row);
   display->setCursor(0, 8 * row);
   display->printf("%s: %.1f", title.c_str(), TEMP_DISPLAY_FUNC(temperature));
+  display->display();
+}
+
+void PrintRPM(int row, String title, float rpm) {
+  ClearRow(row);
+  display->setCursor(0, 8 * row);
+  display->printf("%s: %.1f", title.c_str(), rpm);
   display->display();
 }
 
@@ -102,6 +115,9 @@ void setup() {
   auto main_engine_exhaust_temperature =
       new OneWireTemperature(dts, 1000, "/mainEngineWetExhaustTemp/oneWire");
 
+  // Connect the tacho senders
+  auto tach_frequency = ConnectTachoSender(kDigitalInputPin1, "main");
+
   // define metadata for sensors
 
   auto main_engine_oil_temperature_metadata =
@@ -133,6 +149,8 @@ void setup() {
                      10.                         // timeout, in seconds
       );
 
+    // Engine tachometer does not need metadata here since it is part of signalk spec
+
   // connect the sensors to Signal K output paths
 
   main_engine_oil_temperature->connect_to(new SKOutput<float>(
@@ -150,6 +168,8 @@ void setup() {
       new SKOutput<float>("propulsion.main.wetExhaustTemperature",
                           "/mainEngineWetExhaustTemp/skPath",
                           main_engine_exhaust_temperature_metadata));
+
+  // tachometer output already connected to skoutput in ConnectTachoSender()
 
   // initialize the display
   i2c = new TwoWire(0);
@@ -174,6 +194,11 @@ void setup() {
       [](float temperature) { PrintTemperature(2, "Coolant", temperature); }));
   main_engine_exhaust_temperature->connect_to(new LambdaConsumer<float>(
       [](float temperature) { PrintTemperature(3, "Exhaust", temperature); }));
+
+  // For display convert Hz to RPM
+  tach_frequency->connect_to(new LambdaConsumer<float>(
+      [](float value) { PrintRPM(4, "RPM 1", 60 * value); }));
+
 
   // initialize the NMEA 2000 subsystem
 
